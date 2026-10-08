@@ -1,0 +1,30 @@
+PHP Warning:  Module "gd" is already loaded in Unknown on line 0
+
+   INFO  Running migrations.  
+
+  2026_08_02_194131_create_diamonds_table  14.71ms FAIL
+
+   Illuminate\Database\QueryException 
+
+  SQLSTATE[42000]: Syntax error or access violation: 1118 Row size too large. The maximum row size for the used table type, not counting BLOBs, is 65535. This includes storage overhead, check the manual. You have to change some columns to TEXT or BLOBs (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: heydiamond, SQL: create table `diamonds` (`id` bigint unsigned not null auto_increment primary key, `stockNo` varchar(255) null, `status` varchar(255) null, `shape` varchar(255) null, `Diamond_Type` varchar(255) null, `weight` varchar(255) null, `color` varchar(255) null, `clarity` varchar(255) null, `cut` varchar(255) null, `polish` varchar(255) null, `symmetry` varchar(255) null, `fluorescenceIntensity` varchar(255) null, `fluorescenceColor` varchar(255) null, `measurements` varchar(255) null, `shade` varchar(255) null, `BGM` varchar(255) null, `milky` varchar(255) null, `eyeClean` varchar(255) null, `lab` varchar(255) null, `reportNo` varchar(255) null, `reportDate` varchar(255) null, `location` varchar(255) null, `treatment` varchar(255) null, `ratio` varchar(255) null, `growthType` varchar(255) null, `rapPricePerCt` varchar(255) null, `depth` varchar(255) null, `table` varchar(255) null, `girdleThin` varchar(255) null, `girdleThick` varchar(255) null, `gridlePer` varchar(255) null, `girdleCondition` varchar(255) null, `culetSize` varchar(255) null, `ciletCondition` varchar(255) null, `crownHeight` varchar(255) null, `crownAngle` varchar(255) null, `pavilionDepth` varchar(255) null, `pavilionAngle` varchar(255) null, `starLength` varchar(255) null, `inscription` varchar(255) null, `laserInscription` varchar(255) null, `certiComment` varchar(255) null, `keyToSymbole` varchar(255) null, `inclusion` varchar(255) null, `whiteInclusion` varchar(255) null, `blackInclusion` varchar(255) null, `openInclusion` varchar(255) null, `fancyColor` varchar(255) null, `fancyColorIntensity` varchar(255) null, `fancyColorOvertone` varchar(255) null, `country` varchar(255) null, `state` varchar(255) null, `city` varchar(255) null, `certiFile` varchar(255) null, `videoLink` varchar(255) null, `vdbVideo` varchar(255) null, `imageLink` varchar(255) null, `heartImage` varchar(255) null, `arrowImage` varchar(255) null, `assetImage` varchar(255) null, `heartAndArrow` varchar(255) null, `luster` varchar(255) null, `brand` varchar(255) null, `origin` varchar(255) null, `COP` varchar(255) null, `DNA` varchar(255) null, `handyVideo` varchar(255) null, `supplierComment` text null, `tinge` varchar(255) null, `memberComment` text null, `isPair` varchar(255) null, `pairStock` varchar(255) null, `tweezerVideo` varchar(255) null, `length` varchar(255) null, `height` varchar(255) null, `width` varchar(255) null, `pricePerCt` varchar(255) null, `totalPrice` varchar(255) null, `discount` varchar(255) null, `exclusive` varchar(255) null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci')
+
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:838
+    834▕             $exceptionType = $this->isUniqueConstraintError($e)
+    835▕                 ? UniqueConstraintViolationException::class
+    836▕                 : QueryException::class;
+    837▕ 
+  ➜ 838▕             throw new $exceptionType(
+    839▕                 $this->getNameWithReadWriteType(),
+    840▕                 $query,
+    841▕                 $this->prepareBindings($bindings),
+    842▕                 $e,
+
+      [2m+9 vendor frames [22m
+
+  10  database/migrations/2026_08_02_194131_create_diamonds_table.php:13
+      Illuminate\Support\Facades\Facade::__callStatic()
+      [2m+26 vendor frames [22m
+
+  37  artisan:16
+      Illuminate\Foundation\Application::handleCommand()
+
