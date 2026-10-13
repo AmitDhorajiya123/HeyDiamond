@@ -16,6 +16,7 @@ class DiamondResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'encrypted_id' => $this->encrypted_id ?? \App\Traits\EncryptedId::encryptIdStatic($this->id),
             'stockNo' => $this->stockNo,
             'status' => $this->status,
             'shape' => $this->shape,

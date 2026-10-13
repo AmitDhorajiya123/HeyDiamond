@@ -7,12 +7,15 @@ use App\Http\Requests\Api\StoreUserRequest;
 use App\Http\Requests\Api\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Traits\EncryptedId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class UserApiController extends Controller
 {
+    use EncryptedId;
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = User::query();
@@ -36,13 +39,21 @@ class UserApiController extends Controller
         $perPage = (int) $request->input('per_page', 15);
         $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 15;
 
-        return UserResource::collection($query->latest('id')->paginate($perPage));
+        $users = $query->latest('id')->paginate($perPage);
+
+        $users->getCollection()->transform(function ($user) {
+            $user->encrypted_id = $this->encryptId($user->id);
+            return $user;
+        });
+
+        return UserResource::collection($users);
     }
 
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();
         $user = User::create($data);
+        $user->encrypted_id = $this->encryptId($user->id);
 
         return (new UserResource($user))
             ->additional([
@@ -53,8 +64,19 @@ class UserApiController extends Controller
             ->setStatusCode(201);
     }
 
-    public function show(User $user): JsonResponse
+    public function show(string $encrypted_id): JsonResponse
     {
+        $user = $this->findByEncryptedId(User::class, $encrypted_id);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        $user->encrypted_id = $this->encryptId($user->id);
+
         return (new UserResource($user))
             ->additional([
                 'success' => true,
@@ -63,13 +85,23 @@ class UserApiController extends Controller
             ->response();
     }
 
-    public function update(UpdateUserRequest $request, User $user): JsonResponse
+    public function update(UpdateUserRequest $request, string $encrypted_id): JsonResponse
     {
+        $user = $this->findByEncryptedId(User::class, $encrypted_id);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
         $data = $request->validated();
         if (empty($data['password'])) {
             unset($data['password']);
         }
         $user->update($data);
+        $user->encrypted_id = $this->encryptId($user->id);
 
         return (new UserResource($user))
             ->additional([
@@ -79,8 +111,17 @@ class UserApiController extends Controller
             ->response();
     }
 
-    public function destroy(User $user): JsonResponse
+    public function destroy(string $encrypted_id): JsonResponse
     {
+        $user = $this->findByEncryptedId(User::class, $encrypted_id);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
         $user->delete();
 
         return response()->json([

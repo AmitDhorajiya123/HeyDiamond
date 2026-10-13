@@ -16,6 +16,7 @@ class UserResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'encrypted_id' => $this->encrypted_id ?? \App\Traits\EncryptedId::encryptIdStatic($this->id),
             'name' => $this->name,
             'email' => $this->email,
             'mobile_no' => $this->mobile_no,
