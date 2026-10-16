@@ -30,6 +30,12 @@ use Illuminate\Support\Facades\Route;
 Route::post('login', [AuthApiController::class, 'login'])->name('api.login');
 Route::post('register', [AuthApiController::class, 'register'])->name('api.register');
 
+Route::get('/test', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'HeyDiamond Laravel API is working!',
+    ]);
+});
 // ============================================
 // PUBLIC TEST ENDPOINTS (No Auth Required)
 // ============================================

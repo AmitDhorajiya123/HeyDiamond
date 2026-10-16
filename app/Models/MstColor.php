@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstColor extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_color';
 
     protected $primaryKey = 'color_id';

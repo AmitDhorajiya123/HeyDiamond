@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstFluorescence extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_fluorescence';
 
     protected $primaryKey = 'fluorescence_id';

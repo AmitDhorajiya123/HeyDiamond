@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstBgmBlackOption extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_bgm_black_option';
 
     protected $primaryKey = 'option_id';

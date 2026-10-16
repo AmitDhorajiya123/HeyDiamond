@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstFinishGrade extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_finish_grade';
 
     protected $primaryKey = 'finish_grade_id';

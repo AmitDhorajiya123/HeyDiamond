@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstSizeRange extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_size_range';
 
     protected $primaryKey = 'size_range_id';

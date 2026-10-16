@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstShape extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_shape';
 
     protected $primaryKey = 'shape_id';

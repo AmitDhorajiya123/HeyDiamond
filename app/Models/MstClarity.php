@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasCustomDates;
 
 class MstClarity extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_clarity';
 
     protected $primaryKey = 'clarity_id';

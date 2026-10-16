@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\HasCustomDates;
 
 class MstCategory extends Model
 {
+    use HasCustomDates;
     protected $table = 'mst_category';
 
     protected $primaryKey = 'category_id';
