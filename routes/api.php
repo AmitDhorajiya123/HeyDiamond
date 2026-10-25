@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\MstBgmBlackOptionApiController;
 use App\Http\Controllers\Api\MstCategoryApiController;
 use App\Http\Controllers\Api\MstSubcategoryApiController;
 use App\Http\Controllers\Api\EncryptionTestController;
+use App\Http\Controllers\Api\DashboardApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -52,12 +53,16 @@ Route::prefix('test')->group(function () {
 
 // Protected Routes (Passport auth:api)
 Route::middleware('auth:api')->group(function () {
+    // Dashboard counts
+    Route::get('dashboard/counts', [DashboardApiController::class, 'counts'])->name('dashboard.counts');
     // Auth profile & logout
     Route::get('profile', [AuthApiController::class, 'profile'])->name('api.profile');
     Route::post('logout', [AuthApiController::class, 'logout'])->name('api.logout');
 
     // Diamond CRUD API (still uses plain ID for backward compatibility)
+    Route::post('diamonds/search', [DiamondApiController::class, 'index'])->name('diamonds.search');
     Route::apiResource('diamonds', DiamondApiController::class);
+    Route::post('diamonds/sync', [DiamondApiController::class, 'sync'])->name('diamonds.sync');
 
     // User CRUD API (NOW USES ENCRYPTED ID)
     Route::get('users', [UserApiController::class, 'index'])->name('users.index');

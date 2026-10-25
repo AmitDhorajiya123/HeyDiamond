@@ -17,7 +17,7 @@ class AdminUserSeeder extends Seeder
             [
                 'name' => 'Admin',
                 'mobile_no' => null,
-                'password' => 'Admin@123',
+                'password' => \Illuminate\Support\Facades\Hash::make('Admin@123'),
                 'role' => 'admin',
                 'status' => 'active',
             ]
