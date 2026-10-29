@@ -23,7 +23,7 @@ class DiamondApiController extends Controller
         // Everything is bound with placeholders below, this is an extra guard
         // against malformed / tampered values.
         $request->validate([
-            'search' => ['nullable', 'string', 'max:120'],
+            'search' => ['nullable', 'max:120'],
             'symbolMode' => ['nullable', 'in:contains,not_contains,only_contains'],
             'symbols' => ['nullable'],
             'sort_by' => ['nullable', 'string', 'max:50'],
@@ -48,14 +48,62 @@ class DiamondApiController extends Controller
 
         $query = Diamond::query();
 
-        // Search by stockNo or reportNo
+        // Filter page "Stock ID / Certificate #" search (stockNo OR reportNo only)
+        $stockSearch = $request->input('stockSearch');
+
+        if (is_string($stockSearch) && ($stockSearch = trim(mb_substr($stockSearch, 0, 120))) !== '') {
+            $query->where(function ($q) use ($stockSearch) {
+                $q->where('stockNo', 'like', "%{$stockSearch}%")
+                  ->orWhere('reportNo', 'like', "%{$stockSearch}%");
+            });
+        }
+
+        // Global search across every diamond column (supports multi-word queries)
         $search = $request->input('search');
 
-        if (is_string($search) && ($search = trim(mb_substr($search, 0, 120))) !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('stockNo', 'like', "%{$search}%")
-                  ->orWhere('reportNo', 'like', "%{$search}%");
-            });
+        // Accept both ?search=term and Yajra's ?search[value]=term
+        if (is_array($search)) {
+            $search = $search['value'] ?? '';
+        }
+
+        $search = is_string($search) ? trim(mb_substr($search, 0, 120)) : '';
+
+        if ($search !== '') {
+            $searchColumns = [
+                'id', 'stockNo', 'status', 'shape', 'Diamond_Type', 'weight', 'color',
+                'clarity', 'cut', 'polish', 'symmetry', 'fluorescenceIntensity',
+                'fluorescenceColor', 'measurements', 'shade', 'BGM', 'milky', 'eyeClean',
+                'lab', 'reportNo', 'reportDate', 'location', 'treatment', 'ratio',
+                'growthType', 'rapPricePerCt', 'depth', 'table', 'girdleThin',
+                'girdleThick', 'gridlePer', 'girdleCondition', 'culetSize',
+                'ciletCondition', 'crownHeight', 'crownAngle', 'pavilionDepth',
+                'pavilionAngle', 'starLength', 'inscription', 'laserInscription',
+                'certiComment', 'keyToSymbole', 'inclusion', 'whiteInclusion',
+                'blackInclusion', 'openInclusion', 'fancyColor', 'fancyColorIntensity',
+                'fancyColorOvertone', 'country', 'state', 'city', 'certiFile',
+                'videoLink', 'vdbVideo', 'imageLink', 'heartImage', 'arrowImage',
+                'assetImage', 'heartAndArrow', 'luster', 'brand', 'origin', 'COP',
+                'DNA', 'handyVideo', 'supplierComment', 'tinge', 'memberComment',
+                'isPair', 'pairStock', 'tweezerVideo', 'length', 'height', 'width',
+                'pricePerCt', 'totalPrice', 'discount', 'exclusive', 'created_at',
+                'updated_at',
+            ];
+
+            $terms = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $terms = array_slice($terms, 0, 5);
+
+            if (!empty($terms)) {
+                // Every term must match at least one column (e.g. "round vs1")
+                $query->where(function ($q) use ($searchColumns, $terms) {
+                    foreach ($terms as $term) {
+                        $q->where(function ($subQuery) use ($searchColumns, $term) {
+                            foreach ($searchColumns as $column) {
+                                $subQuery->orWhere($column, 'like', '%' . $term . '%');
+                            }
+                        });
+                    }
+                });
+            }
         }
 
         // Filters - supports both single values and comma separated / array values
