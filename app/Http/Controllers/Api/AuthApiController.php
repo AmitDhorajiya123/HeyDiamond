@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 
 class AuthApiController extends Controller
 {
@@ -112,4 +113,56 @@ class AuthApiController extends Controller
             'message' => 'Logged out successfully.',
         ], 200);
     }
+
+
+
+
+public function testGet(): JsonResponse
+{
+    return $this->testExternalApi('GET');
+}
+
+public function testPost(): JsonResponse
+{
+    return $this->testExternalApi('POST');
+}
+
+private function testExternalApi(string $method): JsonResponse
+{
+    $url = 'https://noamdiamonds.com/apis/api/getStockN?auth_key=h3hqs2oimfnl';
+    // $url = 'https://shivkrishnadiamond.com/papi/get_stock';
+
+    try {
+        $http = Http::timeout(120);
+
+        // Only for local testing
+        if (app()->environment('local', 'development')) {
+            $http->withoutVerifying();
+        }
+
+        if ($method === 'GET') {
+            $response = $http->get($url);
+        } else {
+            $response = $http->post($url);
+        }
+
+        return response()->json([
+            'success' => $response->successful(),
+            'requested_method' => $method,
+            'requested_url' => $url,
+            'api_status' => $response->status(),
+            'api_headers' => $response->headers(),
+            'api_response' => $response->json() ?? $response->body(),
+        ], 200);
+
+    } catch (\Throwable $e) {
+
+        return response()->json([
+            'success' => false,
+            'requested_method' => $method,
+            'requested_url' => $url,
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
 }

@@ -10,4 +10,9 @@ class Diamond extends Model
     use HasFactory;
 
     protected $guarded = [];
+
+    public function apiClient()
+    {
+        return $this->belongsTo(ApiClient::class, 'api_client_id');
+    }
 }

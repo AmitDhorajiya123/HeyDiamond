@@ -18,6 +18,8 @@ use App\Http\Controllers\Api\EncryptionTestController;
 use App\Http\Controllers\Api\DashboardApiController;
 use Illuminate\Support\Facades\Route;
 
+// Route::get('/test-diamond-api-get', [AuthApiController::class, 'testGet']);
+// Route::post('/test-diamond-api-post', [AuthApiController::class, 'testPost']);
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -61,6 +63,11 @@ Route::middleware('auth:api')->group(function () {
 
     // Diamond CRUD API (still uses plain ID for backward compatibility)
     Route::post('diamonds/search', [DiamondApiController::class, 'index'])->name('diamonds.search');
+    Route::get('diamonds/location-options', [DiamondApiController::class, 'locationOptions'])->name('diamonds.location-options');
+    // API clients (DB driven external API source list)
+    Route::get('diamonds/api-clients', [DiamondApiController::class, 'apiClients'])->name('diamonds.api-clients');
+    Route::post('diamonds/api-clients', [DiamondApiController::class, 'storeApiClient'])->name('diamonds.api-clients.store');
+    Route::delete('diamonds/api-clients/{id}', [DiamondApiController::class, 'destroyApiClient'])->name('diamonds.api-clients.destroy');
     Route::apiResource('diamonds', DiamondApiController::class);
     Route::post('diamonds/sync', [DiamondApiController::class, 'sync'])->name('diamonds.sync');
 
