@@ -172,6 +172,35 @@ class DiamondApiController extends Controller
                 continue;
             }
 
+            // Cut / Polish / Symmetry: the filter page shows friendly grades
+            // (8X, Ideal, Excellent, ...) while the diamonds table stores short
+            // codes (IDEAL, ID, EX, VG, ...). Expand each selection so both the
+            // friendly label and its stored codes are matched.
+            if (in_array($field, ['cut', 'polish', 'symmetry'], true)) {
+                $finishGradeMap = [
+                    '8X' => ['8X'],
+                    'IDEAL' => ['IDEAL', 'ID'],
+                    'EXCELLENT' => ['EX', 'EXCELLENT'],
+                    'VERY GOOD' => ['VG', 'VERY GOOD'],
+                    'GOOD' => ['GD', 'GOOD'],
+                    'FAIR' => ['FR', 'FAIR'],
+                    'POOR' => ['PR', 'POOR'],
+                ];
+
+                $expanded = [];
+
+                foreach ($values as $grade) {
+                    $expanded[] = $grade;
+                    $key = strtoupper(trim($grade));
+
+                    if (isset($finishGradeMap[$key])) {
+                        $expanded = array_merge($expanded, $finishGradeMap[$key]);
+                    }
+                }
+
+                $values = array_values(array_unique($expanded));
+            }
+
             if ($field === 'fancyColorIntensity') {
                 $fancyIntensityValues = $values;
             }
@@ -241,11 +270,9 @@ class DiamondApiController extends Controller
 
             $selectedColors = array_values(array_unique($selectedColors));
 
-            if (empty($selectedColors) && empty($fancyIntensityValues)) {
-                // Default to all white grades unless a fancy intensity is filtering.
-                $selectedColors = $whiteColors;
-            }
-
+            // No color selected in White mode = no color restriction, so
+            // location / shape / clarity / cut filters also return fancy-color
+            // stones. Selecting specific white grades still filters D-Z.
             if (!empty($selectedColors)) {
                 $query->whereIn('color', $selectedColors);
             }
@@ -774,6 +801,7 @@ class DiamondApiController extends Controller
                     'id' => (int) $client->id,
                     'name' => $client->name,
                     'url' => $client->url,
+                    'markup' => (float) $client->markup,
                 ];
             }),
         ]);
@@ -787,7 +815,10 @@ class DiamondApiController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'url' => ['required', 'string', 'max:255', 'url'],
+            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
         ]);
+
+        $validated['markup'] = $validated['markup'] ?? 0;
 
         $apiClient = ApiClient::create($validated);
 
@@ -798,8 +829,45 @@ class DiamondApiController extends Controller
                 'id' => (int) $apiClient->id,
                 'name' => $apiClient->name,
                 'url' => $apiClient->url,
+                'markup' => (float) $apiClient->markup,
             ],
         ], 201);
+    }
+
+    /**
+     * Update an existing external API client (name, URL and markup %).
+     */
+    public function updateApiClient(Request $request, $id): JsonResponse
+    {
+        $apiClient = ApiClient::query()->find((int) $id);
+
+        if (!$apiClient) {
+            return response()->json([
+                'success' => false,
+                'message' => 'API client not found.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'url' => ['required', 'string', 'max:255', 'url'],
+            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+        ]);
+
+        $validated['markup'] = $validated['markup'] ?? 0;
+
+        $apiClient->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'API client updated successfully.',
+            'data' => [
+                'id' => (int) $apiClient->id,
+                'name' => $apiClient->name,
+                'url' => $apiClient->url,
+                'markup' => (float) $apiClient->markup,
+            ],
+        ]);
     }
 
     /**

@@ -67,6 +67,8 @@ Route::middleware('auth:api')->group(function () {
     // API clients (DB driven external API source list)
     Route::get('diamonds/api-clients', [DiamondApiController::class, 'apiClients'])->name('diamonds.api-clients');
     Route::post('diamonds/api-clients', [DiamondApiController::class, 'storeApiClient'])->name('diamonds.api-clients.store');
+    Route::put('diamonds/api-clients/{id}', [DiamondApiController::class, 'updateApiClient'])->name('diamonds.api-clients.update');
+    Route::patch('diamonds/api-clients/{id}', [DiamondApiController::class, 'updateApiClient'])->name('diamonds.api-clients.update');
     Route::delete('diamonds/api-clients/{id}', [DiamondApiController::class, 'destroyApiClient'])->name('diamonds.api-clients.destroy');
     Route::apiResource('diamonds', DiamondApiController::class);
     Route::post('diamonds/sync', [DiamondApiController::class, 'sync'])->name('diamonds.sync');
