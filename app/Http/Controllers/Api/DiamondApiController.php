@@ -7,6 +7,7 @@ use App\Http\Requests\Api\StoreDiamondRequest;
 use App\Http\Requests\Api\UpdateDiamondRequest;
 use App\Http\Resources\DiamondResource;
 use App\Models\ApiClient;
+use App\Models\ApiClientMarkup;
 use App\Models\Diamond;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,7 @@ class DiamondApiController extends Controller
         // against malformed / tampered values.
         $request->validate([
             'search' => ['nullable', 'max:120'],
+            'search_field' => ['nullable', 'in:stock_no,report_no'],
             'colorMode' => ['nullable', 'in:white,fancy'],
             'symbolMode' => ['nullable', 'in:contains,not_contains,only_contains'],
             'symbols' => ['nullable'],
@@ -70,7 +72,50 @@ class DiamondApiController extends Controller
 
         $search = is_string($search) ? trim(mb_substr($search, 0, 120)) : '';
 
-        if ($search !== '') {
+        $searchField = $request->input('search_field');
+        $searchField = in_array($searchField, ['stock_no', 'report_no'], true) ? $searchField : null;
+
+        if ($search !== '' && $searchField !== null) {
+            // Format-aware search: restrict the lookup to one column and allow
+            // several fixed-width values pasted back-to-back.
+            // e.g. report no "854644177854644171" => 854644177 + 854644171
+            //      stock no  "106263103431"         => 106263 + 103431
+            $column = $searchField === 'stock_no' ? 'stockNo' : 'reportNo';
+            $chunkSize = $searchField === 'stock_no' ? 6 : 9;
+
+            // Split on whitespace/commas first, then split long digit strings
+            // into chunks of the selected format.
+            $tokens = preg_split('/[\s,;]+/', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $chunks = [];
+
+            foreach ($tokens as $token) {
+                $token = trim($token);
+
+                if ($token === '') {
+                    continue;
+                }
+
+                if (preg_match('/^\d+$/', $token) && strlen($token) > $chunkSize) {
+                    foreach (str_split($token, $chunkSize) as $piece) {
+                        if ($piece !== '') {
+                            $chunks[] = $piece;
+                        }
+                    }
+                } else {
+                    $chunks[] = $token;
+                }
+            }
+
+            $chunks = array_slice(array_values(array_unique($chunks)), 0, 50);
+
+            if (!empty($chunks)) {
+                $query->where(function ($q) use ($column, $chunks) {
+                    foreach ($chunks as $chunk) {
+                        $q->orWhere($column, 'like', '%' . $chunk . '%');
+                    }
+                });
+            }
+        } elseif ($search !== '') {
             $searchColumns = [
                 'id', 'stockNo', 'status', 'shape', 'Diamond_Type', 'weight', 'color',
                 'clarity', 'cut', 'polish', 'symmetry', 'fluorescenceIntensity',
@@ -791,51 +836,49 @@ class DiamondApiController extends Controller
     public function apiClients(): JsonResponse
     {
         $apiClients = ApiClient::query()
+            ->with('markups')
             ->orderBy('id')
             ->get();
 
         return response()->json([
             'success' => true,
             'data' => $apiClients->map(function (ApiClient $client) {
-                return [
-                    'id' => (int) $client->id,
-                    'name' => $client->name,
-                    'url' => $client->url,
-                    'markup' => (float) $client->markup,
-                ];
-            }),
+                return $this->apiClientPayload($client);
+            })->values(),
         ]);
     }
 
     /**
-     * Store a newly created external API client.
+     * Store a newly created external API client with its markup ranges.
      */
     public function storeApiClient(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-            'url' => ['required', 'string', 'max:255', 'url'],
-            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
-        ]);
+        $validated = $this->validateApiClientRequest($request);
+        $ranges = $this->normaliseMarkupRanges($validated['markups'] ?? []);
+
+        if ($error = $this->markupRangesError($ranges)) {
+            return response()->json([
+                'success' => false,
+                'message' => $error,
+                'errors' => ['markups' => [$error]],
+            ], 422);
+        }
 
         $validated['markup'] = $validated['markup'] ?? 0;
+        unset($validated['markups']);
 
         $apiClient = ApiClient::create($validated);
+        $this->syncMarkupRanges($apiClient, $ranges);
 
         return response()->json([
             'success' => true,
             'message' => 'API client created successfully.',
-            'data' => [
-                'id' => (int) $apiClient->id,
-                'name' => $apiClient->name,
-                'url' => $apiClient->url,
-                'markup' => (float) $apiClient->markup,
-            ],
+            'data' => $this->apiClientPayload($apiClient),
         ], 201);
     }
 
     /**
-     * Update an existing external API client (name, URL and markup %).
+     * Update an existing external API client and replace its markup ranges.
      */
     public function updateApiClient(Request $request, $id): JsonResponse
     {
@@ -848,30 +891,32 @@ class DiamondApiController extends Controller
             ], 404);
         }
 
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-            'url' => ['required', 'string', 'max:255', 'url'],
-            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
-        ]);
+        $validated = $this->validateApiClientRequest($request);
+        $ranges = $this->normaliseMarkupRanges($validated['markups'] ?? []);
+
+        if ($error = $this->markupRangesError($ranges)) {
+            return response()->json([
+                'success' => false,
+                'message' => $error,
+                'errors' => ['markups' => [$error]],
+            ], 422);
+        }
 
         $validated['markup'] = $validated['markup'] ?? 0;
+        unset($validated['markups']);
 
         $apiClient->update($validated);
+        $this->syncMarkupRanges($apiClient, $ranges);
 
         return response()->json([
             'success' => true,
             'message' => 'API client updated successfully.',
-            'data' => [
-                'id' => (int) $apiClient->id,
-                'name' => $apiClient->name,
-                'url' => $apiClient->url,
-                'markup' => (float) $apiClient->markup,
-            ],
+            'data' => $this->apiClientPayload($apiClient),
         ]);
     }
 
     /**
-     * Remove an external API client.
+     * Remove an external API client and its markup ranges.
      */
     public function destroyApiClient($id): JsonResponse
     {
@@ -884,11 +929,121 @@ class DiamondApiController extends Controller
             ], 404);
         }
 
+        $apiClient->markups()->delete();
         $apiClient->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'API client deleted successfully.',
         ]);
+    }
+
+    /**
+     * Shared validation rules for API client create/update.
+     */
+    private function validateApiClientRequest(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'url' => ['required', 'string', 'max:255', 'url'],
+            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'markups' => ['nullable', 'array'],
+            'markups.*.min_value' => ['required', 'numeric', 'min:0'],
+            'markups.*.max_value' => ['nullable', 'numeric', 'min:0'],
+            'markups.*.markup' => ['required', 'numeric', 'min:0', 'max:1000'],
+        ]);
+    }
+
+    /**
+     * Normalise incoming ranges (numeric values, null for open-ended) and sort them.
+     */
+    private function normaliseMarkupRanges(array $ranges): array
+    {
+        $normalised = [];
+
+        foreach ($ranges as $range) {
+            if (!is_array($range)) {
+                continue;
+            }
+
+            $normalised[] = [
+                'min_value' => (float) ($range['min_value'] ?? 0),
+                'max_value' => isset($range['max_value']) && $range['max_value'] !== '' && $range['max_value'] !== null
+                    ? (float) $range['max_value']
+                    : null,
+                'markup' => (float) ($range['markup'] ?? 0),
+            ];
+        }
+
+        usort($normalised, function ($a, $b) {
+            return $a['min_value'] <=> $b['min_value'];
+        });
+
+        return $normalised;
+    }
+
+    /**
+     * Reject overlapping ranges and open-ended ranges that are not last.
+     */
+    private function markupRangesError(array $ranges): ?string
+    {
+        $previousMax = null;
+
+        foreach ($ranges as $index => $range) {
+            if ($range['max_value'] !== null && $range['max_value'] < $range['min_value']) {
+                return 'Range ' . ($index + 1) . ': "To" must be greater than or equal to "From".';
+            }
+
+            if ($index > 0) {
+                if ($previousMax === null) {
+                    return 'Only the last markup range can have an empty "To" value.';
+                }
+
+                if ($range['min_value'] <= $previousMax) {
+                    return 'Markup ranges must not overlap.';
+                }
+            }
+
+            $previousMax = $range['max_value'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Replace all markup ranges for an API client.
+     */
+    private function syncMarkupRanges(ApiClient $apiClient, array $ranges): void
+    {
+        $apiClient->markups()->delete();
+
+        if (!empty($ranges)) {
+            $apiClient->markups()->createMany($ranges);
+        }
+
+        $apiClient->load('markups');
+    }
+
+    /**
+     * Shape an API client (with its ranges) for the frontend.
+     */
+    private function apiClientPayload(ApiClient $apiClient): array
+    {
+        $apiClient->loadMissing('markups');
+
+        return [
+            'id' => (int) $apiClient->id,
+            'name' => $apiClient->name,
+            'url' => $apiClient->url,
+            'markup' => (float) $apiClient->markup,
+            'markups' => $apiClient->markups->map(function (ApiClientMarkup $markup) {
+                return [
+                    'id' => (int) $markup->id,
+                    'min_value' => (float) $markup->min_value,
+                    'max_value' => $markup->max_value === null ? null : (float) $markup->max_value,
+                    'markup' => (float) $markup->markup,
+                ];
+            })->values()->all(),
+        ];
     }
 }
