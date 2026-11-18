@@ -18,12 +18,29 @@ trait HandlesMarkupRanges
                 continue;
             }
 
+            $hasValue = false;
+            foreach (['min_value', 'max_value', 'markup'] as $key) {
+                if (isset($range[$key]) && $range[$key] !== '') {
+                    $hasValue = true;
+                    break;
+                }
+            }
+
+            // Empty rows are optional; only save ranges the user actually filled.
+            if (!$hasValue) {
+                continue;
+            }
+
             $normalised[] = [
-                'min_value' => (float) ($range['min_value'] ?? 0),
+                'min_value' => isset($range['min_value']) && $range['min_value'] !== ''
+                    ? (float) $range['min_value']
+                    : 0,
                 'max_value' => isset($range['max_value']) && $range['max_value'] !== '' && $range['max_value'] !== null
                     ? (float) $range['max_value']
                     : null,
-                'markup' => (float) ($range['markup'] ?? 0),
+                'markup' => isset($range['markup']) && $range['markup'] !== ''
+                    ? (float) $range['markup']
+                    : 0,
             ];
         }
 
@@ -44,6 +61,10 @@ trait HandlesMarkupRanges
         foreach ($ranges as $index => $range) {
             if ($range['max_value'] !== null && $range['max_value'] < $range['min_value']) {
                 return 'Range ' . ($index + 1) . ': "To" must be greater than or equal to "From".';
+            }
+
+            if ($range['markup'] > 100) {
+                return 'Range ' . ($index + 1) . ': markup cannot exceed 100%.';
             }
 
             if ($index > 0) {

@@ -139,11 +139,12 @@ class CustomerMarkupApiController extends Controller
         }
 
         $validated = $request->validate([
-            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            // Markup is a percentage: 100% is the hard upper limit.
+            'markup' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'markups' => ['nullable', 'array'],
-            'markups.*.min_value' => ['required', 'numeric', 'min:0'],
+            'markups.*.min_value' => ['nullable', 'numeric', 'min:0'],
             'markups.*.max_value' => ['nullable', 'numeric', 'min:0'],
-            'markups.*.markup' => ['required', 'numeric', 'min:0', 'max:1000'],
+            'markups.*.markup' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $ranges = $this->normaliseMarkupRanges($validated['markups'] ?? []);
