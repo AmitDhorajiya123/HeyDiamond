@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\MstBgmBlackOptionApiController;
 use App\Http\Controllers\Api\MstCategoryApiController;
 use App\Http\Controllers\Api\MstSubcategoryApiController;
 use App\Http\Controllers\Api\DashboardApiController;
+use App\Http\Controllers\Api\FeaturedAdApiController;
 use Illuminate\Support\Facades\Route;
 
 // Route::get('/test-diamond-api-get', [AuthApiController::class, 'testGet']);
@@ -43,6 +44,10 @@ Route::get('/test', function () {
 Route::middleware('auth:api')->group(function () {
     // Dashboard counts
     Route::get('dashboard/counts', [DashboardApiController::class, 'counts'])->name('dashboard.counts');
+    // Dashboard featured diamond ads (stored in DB)
+    Route::get('featured-ads', [FeaturedAdApiController::class, 'index'])->name('featured-ads.index');
+    Route::post('featured-ads', [FeaturedAdApiController::class, 'store'])->name('featured-ads.store');
+    Route::delete('featured-ads/{encrypted_id}', [FeaturedAdApiController::class, 'destroy'])->name('featured-ads.destroy');
     // Auth profile & logout
     Route::get('profile', [AuthApiController::class, 'profile'])->name('api.profile');
     Route::post('logout', [AuthApiController::class, 'logout'])->name('api.logout');
