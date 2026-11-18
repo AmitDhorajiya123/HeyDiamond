@@ -42,6 +42,7 @@ class FeaturedAdApiController extends Controller
     {
         $validated = $request->validate([
             'encrypted_id' => ['required', 'string', 'max:500'],
+            'position' => ['nullable', 'integer', 'min:1', 'max:' . self::MAX_ADS],
         ]);
 
         $diamondId = $this->decryptId($validated['encrypted_id']);
@@ -64,18 +65,47 @@ class FeaturedAdApiController extends Controller
             ]);
         }
 
-        if (FeaturedDiamondAd::query()->count() >= self::MAX_ADS) {
+        // Slots are fixed: removing slot 1 leaves it empty, slots 2 and 3 do
+        // not shift. New ads fill either the requested slot or the first free one.
+        $taken = FeaturedDiamondAd::query()->pluck('position')->map(fn ($p) => (int) $p)->all();
+
+        if (count($taken) >= self::MAX_ADS) {
             return response()->json([
                 'success' => false,
                 'message' => 'Maximum ' . self::MAX_ADS . ' featured diamonds allowed.',
             ], 422);
         }
 
-        $nextPosition = (int) FeaturedDiamondAd::query()->max('position');
+        $requested = isset($validated['position']) ? (int) $validated['position'] : null;
+
+        if ($requested !== null && in_array($requested, $taken, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Slot ' . $requested . ' is already in use.',
+            ], 422);
+        }
+
+        $position = $requested;
+
+        if ($position === null) {
+            for ($slot = 1; $slot <= self::MAX_ADS; $slot++) {
+                if (!in_array($slot, $taken, true)) {
+                    $position = $slot;
+                    break;
+                }
+            }
+        }
+
+        if ($position === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No free featured ad slot available.',
+            ], 422);
+        }
 
         $ad = FeaturedDiamondAd::query()->create([
             'diamond_id' => $diamond->id,
-            'position' => $nextPosition + 1,
+            'position' => $position,
         ]);
 
         return response()->json([
@@ -123,6 +153,7 @@ class FeaturedAdApiController extends Controller
 
         $diamond = DiamondResource::make($ad->diamond)->resolve($request);
         $diamond['ad_encrypted_id'] = $this->encryptId($ad->id);
+        $diamond['position'] = (int) $ad->position;
 
         return $diamond;
     }
