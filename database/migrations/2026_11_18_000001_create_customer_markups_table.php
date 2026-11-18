@@ -8,8 +8,9 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Per-customer markup slabs. Each row defines a $/ct range and the
-     * markup percentage that applies to both $/ct and total price inside it.
+     * Per-customer markup slabs. Each row defines a carat-weight range with
+     * two markup percentages: one for white (D-Z) stones and one for fancy
+     * colour stones. Both apply to $/ct and total price inside the range.
      *
      * A null max_value means "and above" (open-ended final tier).
      *
@@ -30,7 +31,8 @@ return new class extends Migration
             $table->unsignedBigInteger('user_id');
             $table->decimal('min_value', 12, 2)->default(0);
             $table->decimal('max_value', 12, 2)->nullable();
-            $table->decimal('markup', 8, 2)->default(0);
+            $table->decimal('white_markup', 8, 2)->default(0);
+            $table->decimal('color_markup', 8, 2)->default(0);
             $table->timestamps();
 
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');

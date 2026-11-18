@@ -19,7 +19,7 @@ trait HandlesMarkupRanges
             }
 
             $hasValue = false;
-            foreach (['min_value', 'max_value', 'markup'] as $key) {
+            foreach (['min_value', 'max_value', 'white_markup', 'color_markup', 'markup'] as $key) {
                 if (isset($range[$key]) && $range[$key] !== '') {
                     $hasValue = true;
                     break;
@@ -31,6 +31,12 @@ trait HandlesMarkupRanges
                 continue;
             }
 
+            // Legacy payloads used a single "markup" value; keep it as a
+            // fallback for both colour groups.
+            $legacyMarkup = isset($range['markup']) && $range['markup'] !== ''
+                ? (float) $range['markup']
+                : 0;
+
             $normalised[] = [
                 'min_value' => isset($range['min_value']) && $range['min_value'] !== ''
                     ? (float) $range['min_value']
@@ -38,9 +44,12 @@ trait HandlesMarkupRanges
                 'max_value' => isset($range['max_value']) && $range['max_value'] !== '' && $range['max_value'] !== null
                     ? (float) $range['max_value']
                     : null,
-                'markup' => isset($range['markup']) && $range['markup'] !== ''
-                    ? (float) $range['markup']
-                    : 0,
+                'white_markup' => isset($range['white_markup']) && $range['white_markup'] !== ''
+                    ? (float) $range['white_markup']
+                    : $legacyMarkup,
+                'color_markup' => isset($range['color_markup']) && $range['color_markup'] !== ''
+                    ? (float) $range['color_markup']
+                    : $legacyMarkup,
             ];
         }
 
@@ -63,8 +72,11 @@ trait HandlesMarkupRanges
                 return 'Range ' . ($index + 1) . ': "To" must be greater than or equal to "From".';
             }
 
-            if ($range['markup'] > 100) {
-                return 'Range ' . ($index + 1) . ': markup cannot exceed 100%.';
+            foreach (['white_markup', 'color_markup'] as $key) {
+                if ($range[$key] > 100) {
+                    $label = $key === 'white_markup' ? 'White' : 'Color';
+                    return 'Range ' . ($index + 1) . ': ' . $label . ' markup cannot exceed 100%.';
+                }
             }
 
             if ($index > 0) {

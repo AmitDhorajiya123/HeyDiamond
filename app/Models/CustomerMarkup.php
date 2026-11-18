@@ -14,7 +14,8 @@ class CustomerMarkup extends Model
     protected $casts = [
         'min_value' => 'float',
         'max_value' => 'float',
-        'markup' => 'float',
+        'white_markup' => 'float',
+        'color_markup' => 'float',
     ];
 
     public function user()

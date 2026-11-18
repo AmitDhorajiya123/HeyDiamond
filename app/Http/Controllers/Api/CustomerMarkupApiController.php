@@ -144,6 +144,9 @@ class CustomerMarkupApiController extends Controller
             'markups' => ['nullable', 'array'],
             'markups.*.min_value' => ['nullable', 'numeric', 'min:0'],
             'markups.*.max_value' => ['nullable', 'numeric', 'min:0'],
+            'markups.*.white_markup' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'markups.*.color_markup' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Accepted for backwards compatibility with older clients.
             'markups.*.markup' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
@@ -196,11 +199,12 @@ class CustomerMarkupApiController extends Controller
             'role' => $customer->role,
             'status' => $customer->status,
             'markup' => (float) $customer->markup,
-            'markups' => $customer->markups->map(function (CustomerMarkup $markup) {
+            'markups' => $customer->markups->map(function (CustomerMarkup $range) {
                 return [
-                    'min_value' => (float) $markup->min_value,
-                    'max_value' => $markup->max_value === null ? null : (float) $markup->max_value,
-                    'markup' => (float) $markup->markup,
+                    'min_value' => (float) $range->min_value,
+                    'max_value' => $range->max_value === null ? null : (float) $range->max_value,
+                    'white_markup' => (float) $range->white_markup,
+                    'color_markup' => (float) $range->color_markup,
                 ];
             })->values()->all(),
         ];

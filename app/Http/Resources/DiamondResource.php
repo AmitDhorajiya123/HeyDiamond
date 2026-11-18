@@ -121,8 +121,10 @@ class DiamondResource extends JsonResource
     }
 
     /**
-     * Resolve the markup % for this diamond from the customer's price-range slabs.
-     * Ranges are based on $/ct; the matched % is applied to both $/ct and Total $.
+     * Resolve the markup % for this diamond from the customer's weight slabs.
+     * Ranges are based on carat weight; white (D-Z) stones use the White % and
+     * fancy colour stones use the Color % of the matched range. The result is
+     * applied to both $/ct and Total $.
      */
     private function resolveMarkupPercent(?User $customer): float
     {
@@ -135,11 +137,12 @@ class DiamondResource extends JsonResource
             ? $customer->markups
             : $customer->markups()->get();
 
-        if ($ranges->isEmpty() || !is_numeric($this->pricePerCt)) {
+        if ($ranges->isEmpty() || !is_numeric($this->weight)) {
             return $fallback;
         }
 
-        $value = (float) $this->pricePerCt;
+        // Ranges are expressed in carats, not dollars.
+        $value = (float) $this->weight;
         $sorted = $ranges->sortBy('min_value')->values();
         $matched = null;
 
@@ -153,8 +156,8 @@ class DiamondResource extends JsonResource
             }
         }
 
-        // Decimal prices can fall between integer tiers (e.g. 100.50 between
-        // 0-100 and 101-200). In that case keep the highest tier whose From <= value.
+        // Decimal weights can fall between tiers (e.g. 0.55 between 0.50 and
+        // 0.60). In that case keep the highest tier whose From <= weight.
         if (!$matched) {
             foreach ($sorted as $range) {
                 if ($value >= (float) $range->min_value) {
@@ -163,6 +166,14 @@ class DiamondResource extends JsonResource
             }
         }
 
-        return $matched ? (float) $matched->markup : $fallback;
+        if (!$matched) {
+            return $fallback;
+        }
+
+        $percent = $this->isFancyColor()
+            ? ($matched->color_markup ?? $matched->markup ?? $fallback)
+            : ($matched->white_markup ?? $matched->markup ?? $fallback);
+
+        return (float) $percent;
     }
 }
