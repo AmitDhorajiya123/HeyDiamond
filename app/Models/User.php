@@ -25,6 +25,7 @@ class User extends Authenticatable
         'email',
         'mobile_no',
         'role',
+        'markup',
         'status',
         'password',
     ];
@@ -50,6 +51,15 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'deleted_at' => 'datetime',
+            'markup' => 'float',
         ];
+    }
+
+    /**
+     * Price-range markup slabs configured for this customer.
+     */
+    public function markups()
+    {
+        return $this->hasMany(CustomerMarkup::class)->orderBy('min_value');
     }
 }

@@ -4,9 +4,12 @@ namespace App\Http\Requests\Api;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Traits\EncryptedId;
 
 class UpdateDiamondRequest extends FormRequest
 {
+    use EncryptedId;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -22,7 +25,7 @@ class UpdateDiamondRequest extends FormRequest
      */
     public function rules(): array
     {
-        $diamondId = $this->route('diamond') ? ($this->route('diamond')->id ?? $this->route('diamond')) : null;
+        $diamondId = $this->decryptId((string) $this->route('encrypted_id'));
 
         return [
             'stockNo' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('diamonds', 'stockNo')->ignore($diamondId)],

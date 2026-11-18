@@ -7,8 +7,9 @@ use App\Http\Requests\Api\StoreDiamondRequest;
 use App\Http\Requests\Api\UpdateDiamondRequest;
 use App\Http\Resources\DiamondResource;
 use App\Models\ApiClient;
-use App\Models\ApiClientMarkup;
 use App\Models\Diamond;
+use App\Models\User;
+use App\Traits\EncryptedId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\Http;
 
 class DiamondApiController extends Controller
 {
+    use EncryptedId;
+
     /**
      * Display a listing of diamonds with pagination and filters.
      */
@@ -26,13 +29,39 @@ class DiamondApiController extends Controller
         // against malformed / tampered values.
         $request->validate([
             'search' => ['nullable', 'max:120'],
+            'api_client_encrypted_id' => ['nullable', 'string', 'max:500'],
+            'customer_encrypted_id' => ['nullable', 'string', 'max:500'],
             'search_field' => ['nullable', 'in:stock_no,report_no'],
             'colorMode' => ['nullable', 'in:white,fancy'],
             'symbolMode' => ['nullable', 'in:contains,not_contains,only_contains'],
             'symbols' => ['nullable'],
             'sort_by' => ['nullable', 'string', 'max:50'],
             'sort_order' => ['nullable', 'in:asc,desc'],
+            'sizeRanges' => ['nullable', 'array', 'max:8'],
+            'sizeRanges.*' => ['array'],
+            'sizeRanges.*.min' => ['nullable', 'numeric'],
+            'sizeRanges.*.max' => ['nullable', 'numeric'],
         ]);
+
+        // Resolve the customer whose markup should be applied to the listing.
+        // The admin can preview any customer; otherwise the logged-in user's
+        // own markup is used.
+        $markupCustomer = $request->user();
+        $customerEncryptedId = $request->input('customer_encrypted_id');
+
+        if (!empty($customerEncryptedId)) {
+            $customerId = $this->decryptId($customerEncryptedId);
+            $customer = $customerId !== null ? User::query()->find($customerId) : null;
+
+            if (!$customer) {
+                abort(404, 'Customer not found.');
+            }
+
+            $markupCustomer = $customer;
+        }
+
+        $markupCustomer?->loadMissing('markups');
+        $request->attributes->set('markup_customer', $markupCustomer);
 
         $numericFilterFields = [
             'weight', 'pricePerCt', 'totalPrice', 'depth', 'table', 'ratio',
@@ -50,7 +79,7 @@ class DiamondApiController extends Controller
             }
         }
 
-        $query = Diamond::query();
+        $query = Diamond::with('apiClient');
 
         // Filter page "Stock ID / Certificate #" search (stockNo OR reportNo only)
         $stockSearch = $request->input('stockSearch');
@@ -257,10 +286,16 @@ class DiamondApiController extends Controller
             }
         }
 
-        // API source filter (used by the data listing page to show one API's data)
-        $apiClientId = $request->input('api_client_id');
+        // API source filter (encrypted API client ID)
+        $apiClientEncryptedId = $request->input('api_client_encrypted_id');
 
-        if ($apiClientId) {
+        if ($apiClientEncryptedId) {
+            $apiClientId = $this->decryptId($apiClientEncryptedId);
+
+            if ($apiClientId === null) {
+                abort(422, 'Invalid API client reference.');
+            }
+
             $query->where('api_client_id', $apiClientId);
         }
 
@@ -435,7 +470,58 @@ class DiamondApiController extends Controller
             'crownAngle', 'crownHeight', 'pavilionAngle', 'pavilionDepth',
         ];
 
+        // Manual size ranges: up to 8 From/To pairs. A diamond matches when it
+        // falls inside ANY of the ranges; all other filters still apply.
+        $sizeRanges = $request->input('sizeRanges');
+        $hasSizeRanges = false;
+
+        if (is_array($sizeRanges) && count($sizeRanges) > 0) {
+            $normalizedRanges = [];
+
+            foreach (array_slice($sizeRanges, 0, 8) as $range) {
+                if (!is_array($range)) {
+                    continue;
+                }
+
+                $min = (isset($range['min']) && $range['min'] !== '') ? (float) $range['min'] : null;
+                $max = (isset($range['max']) && $range['max'] !== '') ? (float) $range['max'] : null;
+
+                if ($min === null && $max === null) {
+                    continue;
+                }
+
+                if ($min !== null && $max !== null && $min > $max) {
+                    abort(422, 'Size range From must be less than or equal to To.');
+                }
+
+                $normalizedRanges[] = [$min, $max];
+            }
+
+            if (!empty($normalizedRanges)) {
+                $hasSizeRanges = true;
+
+                $query->where(function ($q) use ($normalizedRanges) {
+                    foreach ($normalizedRanges as [$min, $max]) {
+                        $q->orWhere(function ($sub) use ($min, $max) {
+                            if ($min !== null) {
+                                $sub->whereRaw('CAST(`weight` AS DECIMAL(12,3)) >= ?', [$min]);
+                            }
+
+                            if ($max !== null) {
+                                $sub->whereRaw('CAST(`weight` AS DECIMAL(12,3)) <= ?', [$max]);
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
         foreach ($rangeFilters as $field) {
+            // Manual size ranges replace the single weight range.
+            if ($field === 'weight' && $hasSizeRanges) {
+                continue;
+            }
+
             $min = $request->input($field . 'Min');
             $max = $request->input($field . 'Max');
 
@@ -582,8 +668,17 @@ class DiamondApiController extends Controller
     /**
      * Display the specified diamond.
      */
-    public function show(Diamond $diamond): JsonResponse
+    public function show(string $encrypted_id): JsonResponse
     {
+        $diamond = $this->findByEncryptedId(Diamond::class, $encrypted_id);
+
+        if (!$diamond) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Diamond not found.',
+            ], 404);
+        }
+
         return (new DiamondResource($diamond))
             ->additional([
                 'success' => true,
@@ -595,8 +690,17 @@ class DiamondApiController extends Controller
     /**
      * Update the specified diamond in storage.
      */
-    public function update(UpdateDiamondRequest $request, Diamond $diamond): JsonResponse
+    public function update(UpdateDiamondRequest $request, string $encrypted_id): JsonResponse
     {
+        $diamond = $this->findByEncryptedId(Diamond::class, $encrypted_id);
+
+        if (!$diamond) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Diamond not found.',
+            ], 404);
+        }
+
         $diamond->update($request->validated());
 
         return (new DiamondResource($diamond))
@@ -610,8 +714,17 @@ class DiamondApiController extends Controller
     /**
      * Remove the specified diamond from storage.
      */
-    public function destroy(Diamond $diamond): JsonResponse
+    public function destroy(string $encrypted_id): JsonResponse
     {
+        $diamond = $this->findByEncryptedId(Diamond::class, $encrypted_id);
+
+        if (!$diamond) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Diamond not found.',
+            ], 404);
+        }
+
         $diamond->delete();
 
         return response()->json([
@@ -742,13 +855,19 @@ class DiamondApiController extends Controller
      */
     public function sync(Request $request): JsonResponse
     {
-        $apiClientId = $request->input('api_client_id');
+        $request->validate([
+            'api_client_encrypted_id' => ['nullable', 'string', 'max:500'],
+            'source_url' => ['nullable', 'string', 'max:2048'],
+        ]);
+
+        $apiClientEncryptedId = $request->input('api_client_encrypted_id');
         $url = $request->input('source_url');
 
         try {
-            // Case 1: Specific api_client_id requested
-            if (!empty($apiClientId)) {
-                $apiClient = ApiClient::find((int) $apiClientId);
+            // Case 1: Specific API client requested
+            if (!empty($apiClientEncryptedId)) {
+                $apiClientId = $this->decryptId($apiClientEncryptedId);
+                $apiClient = $apiClientId !== null ? ApiClient::find($apiClientId) : null;
                 if (!$apiClient) {
                     return response()->json([
                         'success' => false,
@@ -836,7 +955,6 @@ class DiamondApiController extends Controller
     public function apiClients(): JsonResponse
     {
         $apiClients = ApiClient::query()
-            ->with('markups')
             ->orderBy('id')
             ->get();
 
@@ -849,26 +967,12 @@ class DiamondApiController extends Controller
     }
 
     /**
-     * Store a newly created external API client with its markup ranges.
+     * Store a newly created external API client.
      */
     public function storeApiClient(Request $request): JsonResponse
     {
         $validated = $this->validateApiClientRequest($request);
-        $ranges = $this->normaliseMarkupRanges($validated['markups'] ?? []);
-
-        if ($error = $this->markupRangesError($ranges)) {
-            return response()->json([
-                'success' => false,
-                'message' => $error,
-                'errors' => ['markups' => [$error]],
-            ], 422);
-        }
-
-        $validated['markup'] = $validated['markup'] ?? 0;
-        unset($validated['markups']);
-
         $apiClient = ApiClient::create($validated);
-        $this->syncMarkupRanges($apiClient, $ranges);
 
         return response()->json([
             'success' => true,
@@ -878,11 +982,12 @@ class DiamondApiController extends Controller
     }
 
     /**
-     * Update an existing external API client and replace its markup ranges.
+     * Update an existing external API client.
      */
-    public function updateApiClient(Request $request, $id): JsonResponse
+    public function updateApiClient(Request $request, string $encrypted_id): JsonResponse
     {
-        $apiClient = ApiClient::query()->find((int) $id);
+        $apiClientId = $this->decryptId($encrypted_id);
+        $apiClient = $apiClientId !== null ? ApiClient::query()->find($apiClientId) : null;
 
         if (!$apiClient) {
             return response()->json([
@@ -892,21 +997,7 @@ class DiamondApiController extends Controller
         }
 
         $validated = $this->validateApiClientRequest($request);
-        $ranges = $this->normaliseMarkupRanges($validated['markups'] ?? []);
-
-        if ($error = $this->markupRangesError($ranges)) {
-            return response()->json([
-                'success' => false,
-                'message' => $error,
-                'errors' => ['markups' => [$error]],
-            ], 422);
-        }
-
-        $validated['markup'] = $validated['markup'] ?? 0;
-        unset($validated['markups']);
-
         $apiClient->update($validated);
-        $this->syncMarkupRanges($apiClient, $ranges);
 
         return response()->json([
             'success' => true,
@@ -918,9 +1009,10 @@ class DiamondApiController extends Controller
     /**
      * Remove an external API client and its markup ranges.
      */
-    public function destroyApiClient($id): JsonResponse
+    public function destroyApiClient(string $encrypted_id): JsonResponse
     {
-        $apiClient = ApiClient::query()->find((int) $id);
+        $apiClientId = $this->decryptId($encrypted_id);
+        $apiClient = $apiClientId !== null ? ApiClient::query()->find($apiClientId) : null;
 
         if (!$apiClient) {
             return response()->json([
@@ -946,104 +1038,18 @@ class DiamondApiController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'url' => ['required', 'string', 'max:255', 'url'],
-            'markup' => ['nullable', 'numeric', 'min:0', 'max:1000'],
-            'markups' => ['nullable', 'array'],
-            'markups.*.min_value' => ['required', 'numeric', 'min:0'],
-            'markups.*.max_value' => ['nullable', 'numeric', 'min:0'],
-            'markups.*.markup' => ['required', 'numeric', 'min:0', 'max:1000'],
         ]);
     }
 
     /**
-     * Normalise incoming ranges (numeric values, null for open-ended) and sort them.
-     */
-    private function normaliseMarkupRanges(array $ranges): array
-    {
-        $normalised = [];
-
-        foreach ($ranges as $range) {
-            if (!is_array($range)) {
-                continue;
-            }
-
-            $normalised[] = [
-                'min_value' => (float) ($range['min_value'] ?? 0),
-                'max_value' => isset($range['max_value']) && $range['max_value'] !== '' && $range['max_value'] !== null
-                    ? (float) $range['max_value']
-                    : null,
-                'markup' => (float) ($range['markup'] ?? 0),
-            ];
-        }
-
-        usort($normalised, function ($a, $b) {
-            return $a['min_value'] <=> $b['min_value'];
-        });
-
-        return $normalised;
-    }
-
-    /**
-     * Reject overlapping ranges and open-ended ranges that are not last.
-     */
-    private function markupRangesError(array $ranges): ?string
-    {
-        $previousMax = null;
-
-        foreach ($ranges as $index => $range) {
-            if ($range['max_value'] !== null && $range['max_value'] < $range['min_value']) {
-                return 'Range ' . ($index + 1) . ': "To" must be greater than or equal to "From".';
-            }
-
-            if ($index > 0) {
-                if ($previousMax === null) {
-                    return 'Only the last markup range can have an empty "To" value.';
-                }
-
-                if ($range['min_value'] <= $previousMax) {
-                    return 'Markup ranges must not overlap.';
-                }
-            }
-
-            $previousMax = $range['max_value'];
-        }
-
-        return null;
-    }
-
-    /**
-     * Replace all markup ranges for an API client.
-     */
-    private function syncMarkupRanges(ApiClient $apiClient, array $ranges): void
-    {
-        $apiClient->markups()->delete();
-
-        if (!empty($ranges)) {
-            $apiClient->markups()->createMany($ranges);
-        }
-
-        $apiClient->load('markups');
-    }
-
-    /**
-     * Shape an API client (with its ranges) for the frontend.
+     * Shape an API client for the frontend.
      */
     private function apiClientPayload(ApiClient $apiClient): array
     {
-        $apiClient->loadMissing('markups');
-
         return [
-            'id' => (int) $apiClient->id,
+            'encrypted_id' => $this->encryptId($apiClient->id),
             'name' => $apiClient->name,
             'url' => $apiClient->url,
-            'markup' => (float) $apiClient->markup,
-            'markups' => $apiClient->markups->map(function (ApiClientMarkup $markup) {
-                return [
-                    'id' => (int) $markup->id,
-                    'min_value' => (float) $markup->min_value,
-                    'max_value' => $markup->max_value === null ? null : (float) $markup->max_value,
-                    'markup' => (float) $markup->markup,
-                ];
-            })->values()->all(),
         ];
     }
 }

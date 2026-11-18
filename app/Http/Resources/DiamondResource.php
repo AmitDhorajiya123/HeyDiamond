@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,10 +15,12 @@ class DiamondResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $customer = $this->resolveMarkupCustomer($request);
+
         return [
-            'id' => $this->id,
-            'api_client_id' => $this->api_client_id,
             'encrypted_id' => $this->encrypted_id ?? \App\Traits\EncryptedId::encryptIdStatic($this->id),
+            'api_client_name' => $this->apiClient?->name,
+            'markup_percent' => $this->resolveMarkupPercent($customer),
             'stockNo' => $this->stockNo,
             'status' => $this->status,
             'shape' => $this->shape,
@@ -100,5 +103,66 @@ class DiamondResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * The customer whose markup should be applied. An admin preview can pass
+     * a customer via the request attribute; otherwise the logged-in user is used.
+     */
+    private function resolveMarkupCustomer(Request $request): ?User
+    {
+        $customer = $request->attributes->get('markup_customer');
+
+        if ($customer instanceof User) {
+            return $customer;
+        }
+
+        return $request->user();
+    }
+
+    /**
+     * Resolve the markup % for this diamond from the customer's price-range slabs.
+     * Ranges are based on $/ct; the matched % is applied to both $/ct and Total $.
+     */
+    private function resolveMarkupPercent(?User $customer): float
+    {
+        if (!$customer) {
+            return 0.0;
+        }
+
+        $fallback = (float) $customer->markup;
+        $ranges = $customer->relationLoaded('markups')
+            ? $customer->markups
+            : $customer->markups()->get();
+
+        if ($ranges->isEmpty() || !is_numeric($this->pricePerCt)) {
+            return $fallback;
+        }
+
+        $value = (float) $this->pricePerCt;
+        $sorted = $ranges->sortBy('min_value')->values();
+        $matched = null;
+
+        foreach ($sorted as $range) {
+            $min = (float) $range->min_value;
+            $max = $range->max_value === null ? null : (float) $range->max_value;
+
+            if ($value >= $min && ($max === null || $value <= $max)) {
+                $matched = $range;
+                break;
+            }
+        }
+
+        // Decimal prices can fall between integer tiers (e.g. 100.50 between
+        // 0-100 and 101-200). In that case keep the highest tier whose From <= value.
+        if (!$matched) {
+            foreach ($sorted as $range) {
+                if ($value >= (float) $range->min_value) {
+                    $matched = $range;
+                }
+            }
+        }
+
+        return $matched ? (float) $matched->markup : $fallback;
     }
 }

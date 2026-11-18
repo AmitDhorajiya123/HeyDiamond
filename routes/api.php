@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\Api\DiamondApiController;
 use App\Http\Controllers\Api\LocationApiController;
 use App\Http\Controllers\Api\UserApiController;
+use App\Http\Controllers\Api\CustomerMarkupApiController;
 use App\Http\Controllers\Api\MstShapeApiController;
 use App\Http\Controllers\Api\MstColorApiController;
 use App\Http\Controllers\Api\MstClarityApiController;
@@ -14,7 +15,6 @@ use App\Http\Controllers\Api\MstSizeRangeApiController;
 use App\Http\Controllers\Api\MstBgmBlackOptionApiController;
 use App\Http\Controllers\Api\MstCategoryApiController;
 use App\Http\Controllers\Api\MstSubcategoryApiController;
-use App\Http\Controllers\Api\EncryptionTestController;
 use App\Http\Controllers\Api\DashboardApiController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,20 +39,6 @@ Route::get('/test', function () {
         'message' => 'HeyDiamond Laravel API is working!',
     ]);
 });
-// ============================================
-// PUBLIC TEST ENDPOINTS (No Auth Required)
-// ============================================
-Route::prefix('test')->group(function () {
-    // Encrypt a plain ID
-    Route::post('encrypt', [EncryptionTestController::class, 'encrypt'])->name('test.encrypt');
-    
-    // Decrypt an encrypted ID
-    Route::post('decrypt', [EncryptionTestController::class, 'decrypt'])->name('test.decrypt');
-    
-    // Find model by encrypted ID
-    Route::post('find-by-encrypted-id', [EncryptionTestController::class, 'findByEncryptedId'])->name('test.find-by-encrypted-id');
-});
-
 // Protected Routes (Passport auth:api)
 Route::middleware('auth:api')->group(function () {
     // Dashboard counts
@@ -67,10 +53,12 @@ Route::middleware('auth:api')->group(function () {
     // API clients (DB driven external API source list)
     Route::get('diamonds/api-clients', [DiamondApiController::class, 'apiClients'])->name('diamonds.api-clients');
     Route::post('diamonds/api-clients', [DiamondApiController::class, 'storeApiClient'])->name('diamonds.api-clients.store');
-    Route::put('diamonds/api-clients/{id}', [DiamondApiController::class, 'updateApiClient'])->name('diamonds.api-clients.update');
-    Route::patch('diamonds/api-clients/{id}', [DiamondApiController::class, 'updateApiClient'])->name('diamonds.api-clients.update');
-    Route::delete('diamonds/api-clients/{id}', [DiamondApiController::class, 'destroyApiClient'])->name('diamonds.api-clients.destroy');
-    Route::apiResource('diamonds', DiamondApiController::class);
+    Route::put('diamonds/api-clients/{encrypted_id}', [DiamondApiController::class, 'updateApiClient'])->name('diamonds.api-clients.update');
+    Route::patch('diamonds/api-clients/{encrypted_id}', [DiamondApiController::class, 'updateApiClient'])->name('diamonds.api-clients.update');
+    Route::delete('diamonds/api-clients/{encrypted_id}', [DiamondApiController::class, 'destroyApiClient'])->name('diamonds.api-clients.destroy');
+    Route::apiResource('diamonds', DiamondApiController::class)->parameters([
+        'diamonds' => 'encrypted_id',
+    ]);
     Route::post('diamonds/sync', [DiamondApiController::class, 'sync'])->name('diamonds.sync');
 
     // User CRUD API (NOW USES ENCRYPTED ID)
@@ -81,8 +69,17 @@ Route::middleware('auth:api')->group(function () {
     Route::patch('users/{encrypted_id}', [UserApiController::class, 'update'])->name('users.update');
     Route::delete('users/{encrypted_id}', [UserApiController::class, 'destroy'])->name('users.destroy');
 
+    // Customer-wise markup (global markup applied to every diamond for a customer)
+    Route::get('customer-markups', [CustomerMarkupApiController::class, 'index'])->name('customer-markups.index');
+    Route::get('customer-markups/options', [CustomerMarkupApiController::class, 'options'])->name('customer-markups.options');
+    Route::get('customer-markups/{encrypted_id}', [CustomerMarkupApiController::class, 'show'])->name('customer-markups.show');
+    Route::put('customer-markups/{encrypted_id}', [CustomerMarkupApiController::class, 'update'])->name('customer-markups.update');
+    Route::patch('customer-markups/{encrypted_id}', [CustomerMarkupApiController::class, 'update'])->name('customer-markups.update');
+
     // Location CRUD API (still uses plain ID for backward compatibility)
-    Route::apiResource('locations', LocationApiController::class);
+    Route::apiResource('locations', LocationApiController::class)->parameters([
+        'locations' => 'encrypted_id',
+    ]);
 
     // Master Tables CRUD APIs (using encrypted IDs)
     // Shape

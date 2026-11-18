@@ -4,9 +4,12 @@ namespace App\Http\Requests\Api;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Traits\EncryptedId;
 
 class UpdateUserRequest extends FormRequest
 {
+    use EncryptedId;
+
     public function authorize(): bool
     {
         return true;
@@ -14,7 +17,7 @@ class UpdateUserRequest extends FormRequest
 
     public function rules(): array
     {
-        $userId = $this->route('user') ? ($this->route('user')->id ?? $this->route('user')) : null;
+        $userId = $this->decryptId((string) $this->route('encrypted_id'));
 
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],

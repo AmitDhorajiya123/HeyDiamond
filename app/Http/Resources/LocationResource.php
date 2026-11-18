@@ -10,7 +10,6 @@ class LocationResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'location_id' => $this->location_id,
             'encrypted_id' => $this->encrypted_id ?? \App\Traits\EncryptedId::encryptIdStatic($this->location_id),
             'location_code' => $this->location_code,
             'location_name' => $this->location_name,

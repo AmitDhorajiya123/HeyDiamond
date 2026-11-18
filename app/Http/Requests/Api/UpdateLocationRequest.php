@@ -4,9 +4,12 @@ namespace App\Http\Requests\Api;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Traits\EncryptedId;
 
 class UpdateLocationRequest extends FormRequest
 {
+    use EncryptedId;
+
     public function authorize(): bool
     {
         return true;
@@ -14,8 +17,7 @@ class UpdateLocationRequest extends FormRequest
 
     public function rules(): array
     {
-        $location = $this->route('location');
-        $locationId = is_object($location) ? $location->location_id : $location;
+        $locationId = $this->decryptId((string) $this->route('encrypted_id'));
 
         return [
             'location_code' => ['sometimes', 'required', 'string', 'max:10', Rule::unique('mst_location', 'location_code')->ignore($locationId, 'location_id')],

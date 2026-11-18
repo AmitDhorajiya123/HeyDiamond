@@ -12,7 +12,7 @@ trait EncryptedId
      */
     protected function encryptId(int|string $id): string
     {
-        return Crypt::encryptString((string) $id);
+        return self::encryptIdStatic($id);
     }
 
     /**
@@ -21,9 +21,17 @@ trait EncryptedId
     protected function decryptId(string $encryptedId): ?int
     {
         try {
-            $decrypted = Crypt::decryptString($encryptedId);
+            // Tokens are URL-safe base64 (see encryptIdStatic).
+            $payload = strtr($encryptedId, '-_', '+/');
+            $remainder = strlen($payload) % 4;
+
+            if ($remainder !== 0) {
+                $payload .= str_repeat('=', 4 - $remainder);
+            }
+
+            $decrypted = Crypt::decryptString($payload);
             return (int) $decrypted;
-        } catch (DecryptException $e) {
+        } catch (\Throwable $e) {
             return null;
         }
     }
@@ -71,6 +79,10 @@ trait EncryptedId
      */
     public static function encryptIdStatic(int|string $id): string
     {
-        return \Illuminate\Support\Facades\Crypt::encryptString((string) $id);
+        $encrypted = \Illuminate\Support\Facades\Crypt::encryptString((string) $id);
+
+        // Make the token safe to place directly in a URL path segment
+        // (standard base64 uses "+", "/" and "=").
+        return rtrim(strtr($encrypted, '+/', '-_'), '=');
     }
 }

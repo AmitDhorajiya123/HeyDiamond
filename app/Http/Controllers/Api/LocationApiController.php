@@ -7,12 +7,15 @@ use App\Http\Requests\Api\StoreLocationRequest;
 use App\Http\Requests\Api\UpdateLocationRequest;
 use App\Http\Resources\LocationResource;
 use App\Models\Location;
+use App\Traits\EncryptedId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class LocationApiController extends Controller
 {
+    use EncryptedId;
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Location::query();
@@ -52,8 +55,17 @@ class LocationApiController extends Controller
             ->setStatusCode(201);
     }
 
-    public function show(Location $location): JsonResponse
+    public function show(string $encrypted_id): JsonResponse
     {
+        $location = $this->findByEncryptedId(Location::class, $encrypted_id, 'location_id');
+
+        if (!$location) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Location not found.',
+            ], 404);
+        }
+
         return (new LocationResource($location))
             ->additional([
                 'success' => true,
@@ -62,8 +74,17 @@ class LocationApiController extends Controller
             ->response();
     }
 
-    public function update(UpdateLocationRequest $request, Location $location): JsonResponse
+    public function update(UpdateLocationRequest $request, string $encrypted_id): JsonResponse
     {
+        $location = $this->findByEncryptedId(Location::class, $encrypted_id, 'location_id');
+
+        if (!$location) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Location not found.',
+            ], 404);
+        }
+
         $data = $request->validated();
         $data['modified_date'] = now();
 
@@ -77,8 +98,17 @@ class LocationApiController extends Controller
             ->response();
     }
 
-    public function destroy(Location $location): JsonResponse
+    public function destroy(string $encrypted_id): JsonResponse
     {
+        $location = $this->findByEncryptedId(Location::class, $encrypted_id, 'location_id');
+
+        if (!$location) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Location not found.',
+            ], 404);
+        }
+
         $location->delete();
 
         return response()->json([
