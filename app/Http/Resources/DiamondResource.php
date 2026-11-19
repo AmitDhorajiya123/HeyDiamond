@@ -170,10 +170,35 @@ class DiamondResource extends JsonResource
             return $fallback;
         }
 
-        $percent = $this->isFancyColor()
-            ? ($matched->color_markup ?? $matched->markup ?? $fallback)
-            : ($matched->white_markup ?? $matched->markup ?? $fallback);
+        return $this->resolveRangePercent($matched, $fallback);
+    }
 
-        return (float) $percent;
+    /**
+     * A range value of 0 (or blank) means "not set" — the customer's default
+     * markup is used instead. This also covers older rows saved before the
+     * White/Color columns existed, via the legacy `markup` column.
+     */
+    private function resolveRangePercent($range, float $fallback): float
+    {
+        $value = $this->isFancyColor()
+            ? ($range->color_markup ?? null)
+            : ($range->white_markup ?? null);
+
+        if ($this->hasUsableMarkup($value)) {
+            return (float) $value;
+        }
+
+        $legacy = $range->markup ?? null;
+
+        if ($this->hasUsableMarkup($legacy)) {
+            return (float) $legacy;
+        }
+
+        return $fallback;
+    }
+
+    private function hasUsableMarkup($value): bool
+    {
+        return $value !== null && $value !== '' && (float) $value > 0;
     }
 }
